@@ -1,0 +1,111 @@
+#!/bin/sh
+updateFlag=0
+TRIES=4
+localBaseDir=`echo $PWD`"/"
+etc_dir=$localBaseDir"shadowsocks/etc/"
+
+update_dnsmasq_conf_files () {
+    dnsmasq_conf_changed=0
+    config_dir="dnsmasq.d/"
+    localDir=$etc_dir$config_dir
+
+    remoteDir="https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/"
+    remoteFiles="accelerated-domains.china.conf bogus-nxdomain.china.conf"
+
+    for file in $remoteFiles
+    do
+        targetFile=$localDir$file
+        tmpFile="/tmp/"$file".tmp"
+        remoteFileUrl=$remoteDir$file
+
+        file_fetched=0
+        get_remote_files_tries=0
+
+        until [ $file_fetched -eq 1 ] || [ $get_remote_files_tries -gt $TRIES ]
+        do
+            wget -4 --no-check-certificate -O $tmpFile $remoteFileUrl 
+            if [ $? -eq 0 ]; then
+                file_fetched=1
+
+                if [ -e $targetFile ]; then
+                    oldMd5sum=`md5sum $targetFile | awk '{print substr($1,1)}'`
+                    newMd5sum=`md5sum $tmpFile | awk '{print substr($1,1)}'`
+
+                    if [ $newMd5sum = $oldMd5sum ]; then
+                        :
+                    else
+                        mv $tmpFile $targetFile
+                        updateFlag=1
+                        dnsmasq_conf_changed=1
+                    fi;
+                else
+                    mv $tmpFile $targetFile
+                    updateFlag=1
+                    dnsmasq_conf_changed=1
+                fi;
+            fi;                                                                        
+            get_remote_files_tries=$((get_remote_files_tries+1))
+        done;
+
+        if [ $dnsmasq_conf_changed -eq 1 ]; then
+            cd $etc_dir
+            /bin/tar cfz dnsmasq.d.tar.gz $config_dir
+            cd $localBaseDir
+        fi;
+
+    done;
+}
+
+update_chinadns_chnrout () {
+    file="chinadns_chnroute.txt"
+    targetFile=$etc_dir$file
+    dataUrl="http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest"
+    tmpFile="/tmp/"$file".tmp"
+
+    file_fetched=0
+    get_remote_files_tries=0
+    chinadns_chnroute_changed=0
+
+    until [ $file_fetched -eq 1 ] || [ $get_remote_files_tries -gt $TRIES ]
+    do 
+        wget -O- $dataUrl | awk -F\| '/CN\|ipv4/ { printf("%s/%d\n", $4, 32-log($5)/log(2)) }' > $tmpFile
+
+        if [ $? -eq 0 ]; then
+            file_fetched=1
+
+            if [ -e targetFile ]; then
+                oldMd5sum=`md5sum $targetFile | awk '{print substr($1,1)}'`
+                newMd5sum=`md5sum $tmpFile | awk '{print substr($1,1)}'`
+
+                if [ $newMd5sum = $oldMd5sum ]; then
+                    :
+                else
+                    mv $tmpFile $targetFile
+                    updateFlag=1
+                    chinadns_chnroute_changed=1
+                fi;
+            else
+                mv $tmpFile $targetFile
+                updateFlag=1
+                chinadns_chnroute_changed=1
+            fi;
+        fi;
+        get_remote_files_tries=$((get_remote_files_tries+1))
+    done;
+
+    if [ $chinadns_chnroute_changed -eq 1 ]; then
+        cd $etc_dir
+        tar cfz chinadns_chnroute.txt.tar.gz $file
+        cd $localBaseDir
+    fi;
+}
+
+
+update_dnsmasq_conf_files
+update_chinadns_chnrout
+
+if [ $updateFlag -eq 1 ]; then
+    eval $localBaseDir"update-cc"
+else
+    exit 0;
+fi;

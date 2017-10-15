@@ -1,0 +1,235 @@
+#!/bin/sh
+CONFIG="/etc/openwrt_ss.conf"
+TRIES=4
+remoteBaseDir="https://raw.githubusercontent.com/gnu4cn/openwrt-ss-configs/master/"
+PKG_NEED=0
+PKG_INSTALLED=0
+repo_updated=0
+
+wan_mac_modified=0
+
+config_shlib='/usr/bin/config.shlib'
+CONFIG='/etc/openwrt_ss.conf'
+
+if [ -e "${config_shlib}" ]; then
+    . "${config_shlib}"
+else
+    config_read_file() {
+        (/bin/grep -E "^${2}=" -m 1 "${1}" 2>/dev/null || echo "VAR=__UNDEFINED__") | head -n 1 | cut -d '=' -f 2-;
+    }
+
+    config_get() {
+        val="$(config_read_file "${1}" "${2}")";
+        if [ "${val}" = "__UNDEFINED__" ]; then
+            val="$(config_read_file "$CONFIG".defaults "${1}")";
+        fi
+        /usr/bin/printf -- "%s" "${val}";
+    }
+
+    config_set() {
+        /bin/sed -i "s/^\($2\s*=\s*\).*\$/\1$3/" "${1}"
+    }
+fi
+
+if [ -e "${CONFIG}" ]; then
+    wan_mac_modified=$(config_get "${CONFIG}" "wan_mac_modified")
+else
+    :
+fi
+
+update_opkg_repo () {
+    repo_update_tries=0
+    until [ $repo_updated -eq 1 -o $repo_update_tries -gt $TRIES ]
+    do
+        /bin/opkg update
+        if [ $? -eq 0 ]; then
+            repo_updated=1
+        fi;
+        repo_update_tries=$((repo_update_tries+1))
+    done;
+}
+
+# set timezone
+set_tz () {
+    tz_reload=0
+
+    if [ "`/sbin/uci get system.@system[0].zonename`" != "Asia/Shanghai" ]; then
+        tz_reload=1
+        /sbin/uci set system.@system[0].zonename=Asia/Shanghai
+    fi;
+
+    if [ "`/sbin/uci get system.@system[0].timezone`" != "CST-8" ]; then
+        tz_reload=1
+        /sbin/uci set system.@system[0].timezone=CST-8
+    fi;
+
+    if [ $tz_reload -eq 1 ]; then
+        /sbin/uci commit system
+        /sbin/reload_config
+    fi;
+}
+
+# change wireless option
+set_wireless () {
+    wl_reload=0
+
+    if [ "`/sbin/uci get wireless.@wifi-device[0].country`" != "US" ]; then
+        /sbin/uci set wireless.@wifi-device[0].country=US
+        wl_reload=1
+    fi;
+
+    if [ "`/sbin/uci get wireless.@wifi-device[0].channel`" != "auto" ]; then
+        /sbin/uci set wireless.@wifi-device[0].channel=auto
+        wl_reload=1
+    fi;
+
+    if [ "`/sbin/uci get wireless.@wifi-device[0].txpower`" != "20" ]; then
+        /sbin/uci set wireless.@wifi-device[0].txpower=20
+        wl_reload=1
+    fi;
+
+    if [ $wl_reload -eq 1 ]; then
+        /sbin/uci commit wireless
+        /sbin/wifi
+    fi;
+}
+
+install_pkgs_github () {
+    pkgs_need_github="libsodium_1.0.12-1_ar71xx.ipk libmbedtls_2.5.1-2_ar71xx.ipk libudns_0.4-1_ar71xx.ipk"
+
+    /bin/opkg list-installed > /tmp/pkgs_installed.tmp
+
+    for pkg in $pkgs_need_github; do
+        pkg_name=`echo "${pkg}" | awk -F '[_]' '{printf $1}'`
+        pkg_version=`echo "${pkg}" | awk -F '_' '{printf $2}'`
+
+        result=`/bin/cat /tmp/pkgs_installed.tmp | grep "${pkg_name}"`        
+
+        if test -z "$result"; then
+            PKG_NEED=1
+        else
+            current_ver=`/bin/opkg status "${pkg_name}" | grep Version | awk '{printf $2}'`
+            if [ "${pkg_version}" != "${current_ver}" ]; then
+                PKG_NEED=1
+            fi;
+        fi;
+
+
+        if [ $PKG_NEED -eq 1 ]; then
+            update_opkg_repo
+
+            if [ $repo_updated -eq 1 ]; then
+                pkg_URL=$remoteBaseDir$pkg
+                pkg_tmp="/tmp/"$pkg
+
+                fetched_pkg=0
+                fetch_tries=0
+
+                until [ $fetched_pkg -eq 1 ] || [ $fetch_tries -gt $TRIES ]
+                do
+                    wget -4 --no-check-certificate -O $pkg_tmp $pkg_URL
+
+                    if [ $? -eq 0 ]; then
+                        fetched_pkg=1
+                        /bin/opkg install $pkg_tmp
+                        PKG_INSTALLED=1
+                    else
+                        PKG_INSTALLED=0
+                    fi;
+                    fetch_tries=$((fetch_tries+1))
+                done;
+            else
+                PKG_NEED=0
+            fi;
+        fi;
+    done;   
+}
+
+update_ss () {
+    remote_ver="3.1.0-1"
+    current_ver=`/bin/opkg status shadowsocks-libev|grep Version | awk '{printf $2}'`
+
+    if [ "$current_ver" != "$remote_ver" ]; then
+        update_opkg_repo
+
+        if [ $repo_updated -eq 1 ]; then
+            remoteSS="shadowsocks-libev_"$remote_ver"_ar71xx.ipk"
+            ss_URL=$remoteBaseDir$remoteSS
+            tmpSS="/tmp/"$remoteSS
+
+            count=0
+            fetch_success=0
+
+            until [ $fetch_success -eq 1 ] || [ $count -gt 4 ]
+            do
+                wget -4 --no-check-certificate -O $tmpSS $ss_URL
+
+                if [ $? -eq 0 ]; then
+                    fetch_success=1
+                    /bin/opkg install $tmpSS
+                    if [ $? -eq 0 ]; then
+                        echo "Shadowsocks updated successfully. now reload it."
+                        sleep 5
+                        /etc/init.d/shadowsocks reload
+                    else
+                        echo "Something wrong!"
+                    fi
+                fi;
+                count=$((count+1))
+            done;
+        fi;
+    fi;
+}
+
+wan_mac_bind () {
+    if [ $wan_mac_modified -eq 0 ]; then
+        NEWMAC=$(dd if=/dev/urandom bs=1024 count=1 2>/dev/null | md5sum | sed 's/^\(..\)\(..\)\(..\)\(..\)\(..\)\(..\).*$/\1:\2:\3:\4:\5:\6/')
+        /sbin/uci set network.wan.macaddr="$NEWMAC"
+        /sbin/uci commit network
+        if [ -e "${CONFIG}" ]; then
+            config_set "${CONFIG}" "wan_mac_modified" 1
+        else
+            echo "wan_mac_modified=1" >> "${CONFIG}"
+        fi
+
+        /etc/init.d/network reload
+    fi;
+}
+
+install_pkgs_opkg () {
+    pkgs_need="libcares ipset wget gnupg curl ca-certificates"
+
+    /bin/opkg list-installed > /tmp/pkgs_installed.tmp
+
+    for pkg in $pkgs_need
+    do
+        result=`/bin/cat /tmp/pkgs_installed.tmp | grep $pkg`        
+        if test -z "$result"; then
+            PKG_NEED=1
+            update_opkg_repo
+
+            if [ $repo_updated -eq 1 ]; then
+                /bin/opkg install $pkg
+
+                if [ $? -eq 0 ]; then
+                    PKG_INSTALLED=1
+                else
+                    PKG_INSTALLED=0
+                fi;
+            fi;
+        else
+            PKG_NEED=0
+        fi;
+    done;
+}
+
+set_wireless
+wan_mac_bind
+set_tz
+
+install_pkgs_opkg
+install_pkgs_github
+
+if [ $PKG_NEED -eq 0 -o $PKG_INSTALLED -eq 1 ]; then
+    update_ss
+fi;

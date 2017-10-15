@@ -1,0 +1,6 @@
+#!/bin/sh
+
+if [ "$INTERFACE" = "wan" ] && [ "$ACTION" = "ifup" ]; then
+    /etc/init.d/dropbear reload
+    /usr/bin/killall ssh
+fi;

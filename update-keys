@@ -1,0 +1,13 @@
+#!/bin/sh
+local_key=$HOME"/creds/id_rsa"
+remote_key=$HOME"/creds/authorized_keys"
+
+encrypted_local_key=$HOME"/openwrt-ss-configs/shadowsocks/etc/dropbear/id_rsa.en"
+encrypted_remote_key=$HOME"/openwrt-ss-configs/shadowsocks/etc/dropbear/authorized_keys.en"
+
+update_cc=$HOME"/openwrt-ss-configs/update-cc"
+
+gpg --batch --yes --recipient unisko@gmail.com --output $encrypted_local_key --encrypt $local_key
+gpg --batch --yes --recipient unisko@gmail.com --output $encrypted_remote_key --encrypt $remote_key
+
+eval "$update_cc"

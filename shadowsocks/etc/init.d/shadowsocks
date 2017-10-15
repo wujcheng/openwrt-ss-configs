@@ -1,0 +1,100 @@
+#!/bin/sh /etc/rc.common
+
+# Author: https://github.com/gnu4cn/openwrt-ss-configs
+# Date: 2016-10
+
+START=95
+
+SERVICE_USE_PID=1
+SERVICE_WRITE_PID=1
+SERVICE_DAEMONIZE=1
+
+SUBSCRIBED=0
+
+CONFIG="/etc/openwrt_ss.conf"
+CONFIG_SHLIB="/usr/bin/config.shlib"
+
+if [ -e "${CONFIG_SHLIB}" ]; then
+    . /usr/bin/config.shlib
+else
+    config_read_file() {
+        (/bin/grep -E "^${2}=" -m 1 "${1}" 2>/dev/null || echo "VAR=__UNDEFINED__") | head -n 1 | cut -d '=' -f 2-;
+    }
+
+    config_get() {
+        val="$(config_read_file "${1}" "${2}")";
+        if [ "${val}" = "__UNDEFINED__" ]; then
+            val="$(config_read_file "${1}".defaults "${2}")";
+        fi
+        /usr/bin/printf -- "%s" "${val}";
+    }
+
+    config_set() {
+        /bin/sed -i "s/^\($2\s*=\s*\).*\$/\1$3/" "${1}"
+    }
+fi
+
+start () {
+    SUBSCRIBED=$(config_get "${CONFIG}"  "subscribed")
+
+    if [ $SUBSCRIBED -eq 1 ]; then 
+        sed -i 's/114.114.114.114/127.0.0.1#3210/' /etc/dnsmasq.d/gfwlist.conf
+        /etc/init.d/dnsmasq restart
+
+        servers_tmp="/tmp/servers.conf.tmp"
+        servers_random="/etc/servers.used"    
+
+        if [ -e "$servers_tmp" ]; then
+            rm "$servers_tmp"
+        fi;
+
+        if [ -e "$servers_random" ]; then
+            rm "$servers_random"
+        fi;
+
+        servers=`cat /etc/servers.conf`
+        for s in $servers;
+        do
+            printf "%05d %s\n" "`tr -cd 1-9 < /dev/urandom | head -c 5`" "$s" >> "$servers_tmp"
+        done
+
+        sort -n "$servers_tmp" | cut -c7- > "$servers_random"
+
+        serverList=`cat "$servers_random"`
+
+        count=0
+        for server in $serverList
+        do
+            if [ $count -eq 0 ]; then
+                addr=`echo $server|awk -F '[:]'  '{printf $1}'`;
+                port=`echo $server|awk -F '[:]'  '{printf $2}'`;
+                cred=`echo $server|awk -F '[:]'  '{printf $3}'`;
+
+                service_start /usr/bin/ss-redir -s "${addr}" -p "${port}" -k "${cred}" -u -b 0.0.0.0 -m rc4-md5 -l 7654 -t 600 -f /var/run/ss-redir.pid
+                service_start /usr/bin/ss-tunnel -s "${addr}" -p "${port}" -k "${cred}" -u -b 0.0.0.0 -m rc4-md5 -t 600 -l 3210 -L 8.8.8.8:53 -f /var/run/ss-tunnel.pid
+                count=$((count+1))
+            fi
+        done;
+
+        /usr/bin/shadowsocks-firewall
+    else
+        :
+    fi
+}
+
+stop () {
+    SUBSCRIBED=$(config_get "${CONFIG}"  "subscribed")
+
+    if [ $SUBSCRIBED -eq 1 ]; then 
+        sed -i 's/127.0.0.1#3210/114.114.114.114/' /etc/dnsmasq.d/gfwlist.conf
+        /etc/init.d/dnsmasq restart
+
+        service_stop /usr/bin/ss-redir
+        service_stop /usr/bin/ss-tunnel
+        killall ss-redir
+        killall ss-tunnel
+        /etc/init.d/firewall restart
+    else
+        :
+    fi
+}

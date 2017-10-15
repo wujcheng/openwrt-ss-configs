@@ -1,0 +1,36 @@
+#!/bin/sh
+localDir=$HOME"/openwrt-ss-configs/shadowsocks"
+servers=$HOME"/creds/servers.conf"
+
+push () {
+    git add ./*
+    git add shadowsocks/etc/*
+    git add shadowsocks/etc/dnsmasq.d/*
+    git add shadowsocks/etc/init.d/*
+    git add shadowsocks/usr/bin/*
+    git commit -m "Daily update. "$(date +%F)
+    git push
+}
+
+fileList="/etc/fileList.conf"
+files=`cat ${localDir}${fileList}`
+
+count=0
+for file in $files;
+do
+    filePath=`echo $file|awk '{split($0,a,":"); print a[1];}'`
+    oldFileMd5sum=`echo $file|awk '{split($0,a,":"); print a[2];}'`
+
+    newFileMd5sum=`md5sum $localDir$filePath | awk '{print substr($1, 1)}'`
+
+    if [ "$newFileMd5sum" = "$oldFileMd5sum" ]; then
+        :
+    else
+        sed -i 's/'$oldFileMd5sum'/'$newFileMd5sum'/' $localDir$fileList
+    fi;
+
+    count=$((count+1))
+
+done;
+
+push

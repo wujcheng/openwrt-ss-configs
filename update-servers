@@ -1,0 +1,9 @@
+#!/bin/sh
+servers=$HOME"/creds/servers.conf"
+
+encryptedServers=$HOME"/openwrt-ss-configs/shadowsocks/etc/servers.en.txt"
+update_cc=$HOME"/openwrt-ss-configs/update-cc"
+
+gpg --batch --yes --recipient unisko@gmail.com --output $encryptedServers --encrypt $servers
+
+eval "$update_cc"

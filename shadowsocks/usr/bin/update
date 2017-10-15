@@ -1,0 +1,35 @@
+#!/bin/sh
+TRIES=4
+
+get_update_actions_success=0
+fetch_tries=0
+
+update_actions="update-actions"
+local_update_actions="/usr/bin/"$update_actions
+tmp_update_actions="/tmp/"$update_actions".tmp"
+
+if [ -e $tmp_update_actions ]; then
+    rm $tmp_update_actions
+fi;
+
+until [ $get_update_actions_success -eq 1 ] || [ $fetch_tries -gt $TRIES ]; do
+    remoteBaseDir="https://raw.githubusercontent.com/gnu4cn/openwrt-ss-configs/master/"
+    remote_update_actions=$remoteBaseDir"shadowsocks"$local_update_actions
+
+    wget -4 --no-check-certificate -O $tmp_update_actions $remote_update_actions
+    if [ $? -eq 0 ]; then
+        get_update_actions_success=1
+    fi;
+    fetch_tries=$((fetch_tries+1))
+done;
+
+if [ $get_update_actions_success -eq 1 ]; then
+    new_md5sum=`/usr/bin/md5sum $tmp_update_actions | awk '{print substr($1,1)}'`
+    old_md5sum=`/usr/bin/md5sum $local_update_actions | awk '{print substr($1,1)}'`
+
+    if [ "$new_md5sum" != "$old_md5sum" ]; then
+        echo "File update-actions changed, now apply the changes."
+        mv $tmp_update_actions $local_update_actions
+        /bin/chmod +x $local_update_actions
+    fi;
+fi;

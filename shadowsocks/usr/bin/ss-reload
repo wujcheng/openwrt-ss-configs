@@ -1,0 +1,12 @@
+#!/bin/sh
+
+nslookup google.com > /dev/null 2>&1
+
+linkStatus=${?}
+
+if [ $linkStatus -ne 0 ]; then
+    echo "$(date): restart ss-redir...">>/tmp/log/ss-monitor.log && /etc/init.d/shadowsocks restart;
+    exit 0;
+fi
+
+exit 0;
