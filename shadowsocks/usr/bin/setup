@@ -6,8 +6,6 @@ PKG_NEED=0
 PKG_INSTALLED=0
 repo_updated=0
 
-wan_mac_modified=0
-
 config_shlib='/usr/bin/config.shlib'
 CONFIG='/etc/openwrt_ss.conf'
 
@@ -31,12 +29,6 @@ else
     }
 fi
 
-if [ -e "${CONFIG}" ]; then
-    wan_mac_modified=$(config_get "${CONFIG}" "wan_mac_modified")
-else
-    :
-fi
-
 update_opkg_repo () {
     repo_update_tries=0
     until [ $repo_updated -eq 1 -o $repo_update_tries -gt $TRIES ]
@@ -47,21 +39,6 @@ update_opkg_repo () {
         fi;
         repo_update_tries=$((repo_update_tries+1))
     done;
-}
-
-decide_whether_subscribed (){
-    wan_mac=`/sbin/uci get network.wan.macaddr`
-    subscribe_list=$(config_get "${CONFIG}" "subscribe_list")
-
-    listed=0
-    for mac in $subscribe_list
-    do
-        if [ "${mac}" = "${wan_mac}" ]; then
-            listed=1
-        fi
-    done
-
-    config_set "${CONFIG}" "subscribed" $listed
 }
 
 # set timezone
@@ -196,21 +173,6 @@ update_ss () {
     fi;
 }
 
-wan_mac_bind () {
-    if [ $wan_mac_modified -eq 0 ]; then
-        NEWMAC=$(dd if=/dev/urandom bs=1024 count=1 2>/dev/null | md5sum | sed 's/^\(..\)\(..\)\(..\)\(..\)\(..\)\(..\).*$/\1:\2:\3:\4:\5:\6/')
-        /sbin/uci set network.wan.macaddr="$NEWMAC"
-        /sbin/uci commit network
-        if [ -e "${CONFIG}" ]; then
-            config_set "${CONFIG}" "wan_mac_modified" 1
-        else
-            echo "wan_mac_modified=1" >> "${CONFIG}"
-        fi
-
-        /etc/init.d/network reload
-    fi;
-}
-
 install_pkgs_opkg () {
     pkgs_need="libcares ipset wget gnupg curl ca-certificates"
 
@@ -239,10 +201,7 @@ install_pkgs_opkg () {
 }
 
 set_wireless
-wan_mac_bind
 set_tz
-
-decide_whether_subscribed
 
 install_pkgs_opkg
 install_pkgs_github
