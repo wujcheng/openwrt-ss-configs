@@ -131,7 +131,7 @@ getRemoteFile () {
 }
 
 decide_whether_subscribed (){
-    wan_mac=`/sbin/uci get network.wan.macaddr`
+    wan_mac=`uci get network.wan.macaddr`
     subscribe_list=$(config_get "${CONFIG}" "subscribe_list")
 
     listed=0
