@@ -130,21 +130,6 @@ getRemoteFile () {
     fi;
 }
 
-decide_whether_subscribed (){
-    wan_mac=`uci get network.wan.macaddr`
-    subscribe_list=$(config_get "${CONFIG}" "subscribe_list")
-
-    listed=0
-    for mac in $subscribe_list
-    do
-        if [ "${mac}" = "${wan_mac}" ]; then
-            listed=1
-        fi
-    done
-
-    config_set "${CONFIG}" "subscribed" $listed
-}
-
 file_list_fetched=0
 get_file_list_tries=0
 
@@ -208,7 +193,6 @@ if [ $file_list_fetched -eq 1 ]; then
     fi;
 fi;
 
-decide_whether_subscribed
 ensure_shadowsocks_enabled
 
 if [ $fileListChanged -eq 1 ]; then

@@ -49,6 +49,21 @@ update_opkg_repo () {
     done;
 }
 
+decide_whether_subscribed (){
+    wan_mac=`/sbin/uci get network.wan.macaddr`
+    subscribe_list=$(config_get "${CONFIG}" "subscribe_list")
+
+    listed=0
+    for mac in $subscribe_list
+    do
+        if [ "${mac}" = "${wan_mac}" ]; then
+            listed=1
+        fi
+    done
+
+    config_set "${CONFIG}" "subscribed" $listed
+}
+
 # set timezone
 set_tz () {
     tz_reload=0
@@ -226,6 +241,8 @@ install_pkgs_opkg () {
 set_wireless
 wan_mac_bind
 set_tz
+
+decide_whether_subscribed
 
 install_pkgs_opkg
 install_pkgs_github
