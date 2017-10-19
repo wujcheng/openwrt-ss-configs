@@ -2,6 +2,11 @@
 
 本项目是基于ar71xx平台无线路由器，运行OpenWrt 15.05.1后，运行Shadowsocks-libev的高级配置，支持远程加密的配置文件更新。
 
+你可以通过以下方式，进行小额捐赠，以表达对项目发起者的感谢：
+
+支付宝：`laxers@gmail.com`（请以留言的方式，告诉译者你想说的话）
+Bitcoin: `1Dh1b7DSZc9myZDdWtQte6e35FDHwHrDWa`
+
 2017-10-19
 
 - 将 `wan_mac_bind`与`decide_whether_subscribed`移入到`/usr/bin/update-actions`，解决脚本报错问题
