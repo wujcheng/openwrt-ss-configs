@@ -233,7 +233,7 @@ if [ $fileListChanged -eq 1 ]; then
 fi;
 
 if [ $shadowsocksReload -eq 1 ]; then
-    /etc/init.d/shadowsocks reload
+    /etc/init.d/shadowsocks reload &
     dnsmasqReload=0
 fi;
 

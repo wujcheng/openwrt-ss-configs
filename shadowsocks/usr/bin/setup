@@ -162,7 +162,7 @@ update_ss () {
                     if [ $? -eq 0 ]; then
                         echo "Shadowsocks updated successfully. now reload it."
                         sleep 5
-                        /etc/init.d/shadowsocks reload
+                        /etc/init.d/shadowsocks reload &
                     else
                         echo "Something wrong!"
                     fi
