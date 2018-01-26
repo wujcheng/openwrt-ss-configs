@@ -1,5 +1,6 @@
 #!/bin/sh
 
+# 这里通过DNS查询检查状态，若查询失败，则重启 ss-redir 
 nslookup google.com > /dev/null 2>&1
 
 linkStatus=${?}

@@ -27,6 +27,12 @@ iptables -t nat -A SHADOWSOCKS -d 192.168.0.0/16 -j RETURN
 iptables -t nat -A SHADOWSOCKS -d 224.0.0.0/4 -j RETURN
 iptables -t nat -A SHADOWSOCKS -d 240.0.0.0/4 -j RETURN
 
+# Ignore China IP address
+for white_ip in `cat /etc/chinadns_chnroute.txt`;
+do
+    iptables -t nat -A SHADOWSOCKS_WHITELIST -d "${white_ip}" -j MARK --set-mark 1
+done
+
 # Check whitelist
 iptables -t nat -A SHADOWSOCKS -j SHADOWSOCKS_WHITELIST
 iptables -t nat -A SHADOWSOCKS -m mark --mark 1 -j RETURN
@@ -35,9 +41,3 @@ iptables -t nat -A SHADOWSOCKS -m mark --mark 1 -j RETURN
 iptables -t nat -A SHADOWSOCKS -p tcp -j REDIRECT --to-ports 7654
 # Apply the rules
 iptables -t nat -A PREROUTING -p tcp -j SHADOWSOCKS
-
-# Ignore China IP address
-for white_ip in `cat /etc/chinadns_chnroute.txt`;
-do
-    iptables -t nat -A SHADOWSOCKS_WHITELIST -d "${white_ip}" -j MARK --set-mark 1
-done
